@@ -1,5 +1,7 @@
 # M.R.M. La Riera · MRM Analysis Tool
 
+[![DOI](https://zenodo.org/badge/1283246942.svg)](https://doi.org/10.5281/zenodo.24105303)
+
 **Modelo de Residuo Morfológico (MRM) y rugosidad residual local (Rqr) aplicados a la macroindustria lítica.**
 
 Repositorio asociado al artículo:
@@ -203,6 +205,10 @@ Si utilizas este código o la aplicación, cita el artículo:
 
 > García-Noriega, C. y Arias, P. (2026). Aplicación de la técnica de Modelo de Residuo Morfológico (MRM) a la macroindustria lítica: el caso de la azuela pulimentada de La Riera (Llanes, Asturias). *Trabajos de Prehistoria*, 83(2): 1109. <https://doi.org/10.3989/tp.2026.1109>
 
+Para citar específicamente la versión archivada del software en Zenodo:
+
+> García-Noriega, C. y Arias, P. (2026). *M.R.M. La Riera: MRM Analysis Tool y scripts de CloudCompare para el Modelo de Residuo Morfológico y la rugosidad residual* (v1.0.0) [Software]. Zenodo. <https://doi.org/10.5281/zenodo.24105304> (DOI de todas las versiones: <https://doi.org/10.5281/zenodo.24105303>)
+
 Los metadatos de cita están en [`CITATION.cff`](CITATION.cff) (botón «Cite this repository» de GitHub).
 
 ## Licencia
@@ -224,4 +230,4 @@ Los metadatos de cita están en [`CITATION.cff`](CITATION.cff) (botón «Cite th
 
 ## English summary
 
-Repository of García-Noriega & Arias (2026), *Trabajos de Prehistoria* 83(2): 1109 (<https://doi.org/10.3989/tp.2026.1109>). It contains the Python scripts for CloudCompare/CloudComPy used in the article (the v1 MRM scripts are kept unchanged; the roughness scripts are v2, whose `legacy` mode reproduces v1, and v1 is preserved in [commit 5fa4d58](https://github.com/cgarnor/M.-R.-M.-La-Riera/tree/5fa4d586651f55ca8430493df8194cd45b17ca23)), the scaled photogrammetric model of the La Riera adze (`data/Azuela_LaRiera_S.obj`, Git LFS), and **MRM Analysis Tool**, a standalone Windows application that computes the Morphological Residue Model (Poisson trend surface following García-Noriega & Arias 2026, or QEM decimation following Pires et al. 2014, 2015) and the local residual roughness Rqr for one or many 3D models. It classifies Rqr with Jenks (6 classes, a conceptualisation of the polishing grades of Pétrequin et al. 2012b), auto-k, or μ ± σ (testing), and compares artefacts. The μ ± σ classification and the common scale are still being tested for complete archaeological assemblages. The model unit is estimated automatically and must be confirmed (or real dimensions entered). Exported PLY files keep the original model units (the mm factor is written in the header); the CSV uses `;` and decimal comma. The application works offline, runs sandboxed and validates every input file. Automated tests (`npm test`, `npm run test:e2e`) and a numerical comparison with CloudCompare (`npm run validate:cloudcompare`) are included in `validation/`. Generative AI tools were used as support to adapt the original Python code into the application, for the v2 roughness scripts, the CloudComPy helper scripts, the tests and the documentation (see the AI statement above). Licence: MIT (code), CC BY 4.0 (data).
+Repository of García-Noriega & Arias (2026), *Trabajos de Prehistoria* 83(2): 1109 (<https://doi.org/10.3989/tp.2026.1109>; software archive on Zenodo: <https://doi.org/10.5281/zenodo.24105304>). It contains the Python scripts for CloudCompare/CloudComPy used in the article (the v1 MRM scripts are kept unchanged; the roughness scripts are v2, whose `legacy` mode reproduces v1, and v1 is preserved in [commit 5fa4d58](https://github.com/cgarnor/M.-R.-M.-La-Riera/tree/5fa4d586651f55ca8430493df8194cd45b17ca23)), the scaled photogrammetric model of the La Riera adze (`data/Azuela_LaRiera_S.obj`, Git LFS), and **MRM Analysis Tool**, a standalone Windows application that computes the Morphological Residue Model (Poisson trend surface following García-Noriega & Arias 2026, or QEM decimation following Pires et al. 2014, 2015) and the local residual roughness Rqr for one or many 3D models. It classifies Rqr with Jenks (6 classes, a conceptualisation of the polishing grades of Pétrequin et al. 2012b), auto-k, or μ ± σ (testing), and compares artefacts. The μ ± σ classification and the common scale are still being tested for complete archaeological assemblages. The model unit is estimated automatically and must be confirmed (or real dimensions entered). Exported PLY files keep the original model units (the mm factor is written in the header); the CSV uses `;` and decimal comma. The application works offline, runs sandboxed and validates every input file. Automated tests (`npm test`, `npm run test:e2e`) and a numerical comparison with CloudCompare (`npm run validate:cloudcompare`) are included in `validation/`. Generative AI tools were used as support to adapt the original Python code into the application, for the v2 roughness scripts, the CloudComPy helper scripts, the tests and the documentation (see the AI statement above). Licence: MIT (code), CC BY 4.0 (data).

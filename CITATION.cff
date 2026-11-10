@@ -3,6 +3,14 @@ message: "Si utilizas este software, cita el artículo asociado / If you use thi
 title: "M.R.M. La Riera: MRM Analysis Tool y scripts de CloudCompare para el Modelo de Residuo Morfológico y la rugosidad residual"
 type: software
 version: 1.0.0
+doi: "10.5281/zenodo.24105304"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.24105303"
+    description: "DOI de concepto (todas las versiones) / Concept DOI (all versions)"
+  - type: doi
+    value: "10.5281/zenodo.24105304"
+    description: "DOI de la versión 1.0.0 / Version 1.0.0 DOI"
 date-released: 2026-11-10
 license: MIT
 repository-code: "https://github.com/cgarnor/M.-R.-M.-La-Riera"
