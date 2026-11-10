@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "Si utilizas este software, cita el artículo asociado / If you use this software, please cite the associated article."
+title: "M.R.M. La Riera: MRM Analysis Tool y scripts de CloudCompare para el Modelo de Residuo Morfológico y la rugosidad residual"
+type: software
+version: 1.0.0
+date-released: 2026-11-10
+license: MIT
+repository-code: "https://github.com/cgarnor/M.-R.-M.-La-Riera"
+keywords:
+  - Morphological Residue Model
+  - MRM
+  - residual roughness
+  - macrolithic tools
+  - photogrammetry
+  - archaeology
+  - CloudCompare
+authors:
+  - family-names: García-Noriega
+    given-names: Carlos
+    email: carlos.garcianoriega@unican.es
+    orcid: "https://orcid.org/0000-0002-3827-4643"
+    affiliation: "Instituto Internacional de Investigaciones Prehistóricas de Cantabria, Universidad de Cantabria"
+  - family-names: Arias
+    given-names: Pablo
+    email: pablo.arias@unican.es
+    orcid: "https://orcid.org/0000-0003-0481-7563"
+    affiliation: "Instituto Internacional de Investigaciones Prehistóricas de Cantabria, Universidad de Cantabria"
+preferred-citation:
+  type: article
+  title: "Aplicación de la técnica de Modelo de Residuo Morfológico (MRM) a la macroindustria lítica: el caso de la azuela pulimentada de La Riera (Llanes, Asturias)"
+  authors:
+    - family-names: García-Noriega
+      given-names: Carlos
+      orcid: "https://orcid.org/0000-0002-3827-4643"
+    - family-names: Arias
+      given-names: Pablo
+      orcid: "https://orcid.org/0000-0003-0481-7563"
+  journal: "Trabajos de Prehistoria"
+  volume: 83
+  issue: 2
+  start: 1109
+  year: 2026
+  doi: "10.3989/tp.2026.1109"

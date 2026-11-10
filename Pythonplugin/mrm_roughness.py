@@ -1,20 +1,21 @@
 import pycc
 import numpy as np
 
-# mrm_roughness.py
+# mrm_roughness.py  (v2)
 
 '''
 Cuantificación de la rugosidad superficial a partir de los residuos de MRM.
 Script de automatización para CloudCompare (python plugin)
 
-Flujo via Python Plugin (Previa ejecuación de mrm_cloudcompare.py):
+Flujo via Python Plugin (Previa ejecución de mrm_cloudcompare.py):
     a) Cargar el modelo 3D y seleccionarlo como capa activa
-    b) Plugins > Python > ABRIR Script > mrmcloudcompare.py > EJECUTAR Script
+    b) Plugins > Python > ABRIR Script > mrm_roughness.py > EJECUTAR Script
 
 
 Este script lee el campo escalar «MRM_Residuals» y calcula:
 - El valor Rqr por vértice (rugosidad cuadrática residual)
-- Clasificación en 6 clases de rugosidad (R1-R6) utilizando bien los «breaks naturales» de Jenks (también con versión automática), bien umbrales de mu ± sigma
+- Clasificación en 6 clases de rugosidad (R1-R6) utilizando los «breaks naturales» de Jenks
+  (también con versión automática) o umbrales de mu ± sigma
 
 Escala de clasificación:
     R1 = rugosidad residual muy baja (máxima regularidad/pulido)
@@ -29,9 +30,27 @@ Se ofrecen dos métodos de clasificación:
 
     B) mu +/- sigma: umbrales en mu-2s, mu-s, mu-0,5s, mu+0,5s, mu+s.
 
+Novedades de la v2
+------------------
+* Jenks EXACTO (Fisher 1958; Jenks 1977) mediante programación dinámica sobre una muestra
+  ordenada de JENKS_SAMPLE cuantiles equiespaciados. El resultado NO depende de las unidades
+  del modelo (m, mm...) y es idéntico al de la aplicación MRM Analysis Tool.
+* JENKS_METHOD = "legacy" reproduce exactamente el algoritmo de la v1 (y los porcentajes
+  publicados). Aviso: la v1 usaba una tolerancia absoluta de 0.0001; con modelos en metros
+  los valores de Rqr son menores que esa tolerancia y el ajuste se detenía tras una sola
+  iteración, quedando clases casi de igual tamaño (cuantiles).
+* Las unidades de Rqr son las del modelo (si el modelo está en metros, x1000 = mm).
+
 '''
 
 cc = pycc.GetInstance()
+
+# ----- Parámetros de clasificación ------------------------------------------
+JENKS_METHOD = "exact"            # "exact" (recomendado) | "legacy" (algoritmo v1)
+JENKS_SAMPLE = 4000               # nº de cuantiles equiespaciados usados para calcular los cortes
+JENKS_CLASSES = 6
+AUTO_K_MIN, AUTO_K_MAX = 2, 10
+# -----------------------------------------------------------------------------
 
 
 def get_mesh():
@@ -105,11 +124,87 @@ def compute_rqr(residuals, adj):
     return rqr
 
 
-# -- A: Jenks (natural breaks) ------------------------------------
+# -- Utilidades de clasificación -------------------------------------------
+
+def classify_by_breaks(values, breaks):
+    '''Clase b+1 si value <= breaks[b]; clase len(breaks)+1 si supera todos.'''
+    return np.searchsorted(np.asarray(breaks, dtype=np.float64), values, side="left").astype(np.int32) + 1
+
+
+def compute_gvf(values, classes, n_classes):
+    '''Goodness of Variance Fit: 1 - SDCM / SDAM.'''
+    total_mean = values.mean()
+    sdam = np.sum((values - total_mean) ** 2)
+    if sdam == 0:
+        return 1.0
+    sdcm = 0.0
+    for c in range(1, n_classes + 1):
+        mask = classes == c
+        if mask.sum() == 0:
+            continue
+        class_vals = values[mask]
+        sdcm += np.sum((class_vals - class_vals.mean()) ** 2)
+    return 1.0 - sdcm / sdam
+
+
+def elbow_k(gvf_scores, k_min):
+    '''Codo = máximo de |segunda derivada| del GVF.'''
+    if len(gvf_scores) < 3:
+        return k_min
+    d2 = [abs(gvf_scores[i - 1] - 2 * gvf_scores[i] + gvf_scores[i + 1])
+          for i in range(1, len(gvf_scores) - 1)]
+    return k_min + int(np.argmax(d2)) + 1
+
+
+# -- A: Jenks exacto (Fisher-Jenks) -------------------------------------
 '''Determina los límites óptimos entre clases que minimizan la varianza intraclase.
 Los tamaños de las clases son desiguales y reflejan agrupaciones naturales en los datos.'''
 
-def classify_jenks(rqr, n_classes=6, max_iter=30):
+def quantile_sample(values, m=JENKS_SAMPLE):
+    '''Muestra determinista: m valores equiespaciados (en rango) de la distribución ordenada.'''
+    s = np.sort(np.asarray(values, dtype=np.float64))
+    n = len(s)
+    if n <= m:
+        return s
+    idx = (np.arange(m, dtype=np.int64) * (n - 1)) // (m - 1)
+    return s[idx]
+
+
+def fisher_jenks_all(sample, k_max):
+    '''Programación dinámica de Fisher (1958). Devuelve {k: breaks} para k = 1..k_max,
+    donde breaks son los límites superiores de las clases 1..k-1.'''
+    s = np.asarray(sample, dtype=np.float64)
+    n = len(s)
+    c1 = np.concatenate(([0.0], np.cumsum(s)))
+    c2 = np.concatenate(([0.0], np.cumsum(s * s)))
+    D = np.full((k_max + 1, n + 1), np.inf)
+    D[0, 0] = 0.0
+    B = np.zeros((k_max + 1, n + 1), dtype=np.int64)
+    for m in range(1, k_max + 1):
+        for j in range(m, n + 1):
+            i = np.arange(m - 1, j)
+            sm = c1[j] - c1[i]
+            cost = D[m - 1, i] + (c2[j] - c2[i]) - sm * sm / (j - i)
+            a = int(np.argmin(cost))
+            D[m, j] = cost[a]
+            B[m, j] = i[a]
+    out = {}
+    for k in range(1, k_max + 1):
+        starts = []
+        j = n
+        for m in range(k, 0, -1):
+            i = int(B[m, j])
+            starts.append(i)
+            j = i
+        starts = sorted(starts)[1:]
+        out[k] = tuple(float(s[st - 1]) for st in starts)
+    return out
+
+
+# -- A (legacy): algoritmo v1 --------------------------------------------
+'''Reproduce el algoritmo de la v1 (valores publicados). Depende de las unidades del modelo.'''
+
+def classify_jenks_legacy(rqr, n_classes=6, max_iter=30):
     sorted_vals = np.sort(rqr)
     n = len(sorted_vals)
 
@@ -157,6 +252,28 @@ def classify_jenks(rqr, n_classes=6, max_iter=30):
     return classes, tuple(breaks)
 
 
+def classify_jenks(rqr):
+    '''Devuelve (clases 6, cortes 6, best_k, clases auto, cortes auto, gvf por k).'''
+    if JENKS_METHOD == "legacy":
+        cls6, br6 = classify_jenks_legacy(rqr, JENKS_CLASSES)
+        results, gvfs = {}, []
+        for k in range(AUTO_K_MIN, AUTO_K_MAX + 1):
+            cls_k, br_k = classify_jenks_legacy(rqr, k)
+            results[k] = (cls_k, br_k)
+            gvfs.append(compute_gvf(rqr, cls_k, k))
+    else:
+        all_breaks = fisher_jenks_all(quantile_sample(rqr), max(AUTO_K_MAX, JENKS_CLASSES))
+        br6 = all_breaks[JENKS_CLASSES]
+        cls6 = classify_by_breaks(rqr, br6)
+        results, gvfs = {}, []
+        for k in range(AUTO_K_MIN, AUTO_K_MAX + 1):
+            cls_k = classify_by_breaks(rqr, all_breaks[k])
+            results[k] = (cls_k, all_breaks[k])
+            gvfs.append(compute_gvf(rqr, cls_k, k))
+    best_k = max(AUTO_K_MIN, min(elbow_k(gvfs, AUTO_K_MIN), AUTO_K_MAX))
+    return cls6, br6, best_k, results[best_k][0], results[best_k][1], gvfs
+
+
 # -- B: Desviación estándar (mu +/- sigma) ----------------------
 '''Umbrales en mu-2s, mu-s, mu-0,5s, mu+0,5s, mu+s.
 Los tamaños de las clases son desiguales y reflejan la forma de la distribución.'''
@@ -181,57 +298,10 @@ def classify_sigma(rqr):
     return classes, (t1, t2, t3, t4, t5), mu, sigma
 
 
-# -- C: Jenks auto-k (Elbow method) ----------------------------
-'''Ejecuta Jenks para k = 2..10, calcula el índice de ajuste de la varianza (GVF) para cada k,
-y selecciona el «elbow» a partir de la segunda derivada del GVF.'''
-
-def _compute_gvf(values, classes, n_classes):
-    total_mean = values.mean()
-    sdam = np.sum((values - total_mean) ** 2)
-    if sdam == 0:
-        return 1.0
-    sdcm = 0.0 
-    for c in range(1, n_classes + 1):
-        mask = classes == c
-        if mask.sum() == 0:
-            continue
-        class_vals = values[mask]
-        class_mean = class_vals.mean()
-        sdcm += np.sum((class_vals - class_mean) ** 2)
-    return 1.0 - sdcm / sdam
-
-
-def classify_jenks_auto(rqr, k_min=2, k_max=10):
-    gvf_scores = []
-    results = {}
-
-    for k in range(k_min, k_max + 1):
-        cls_k, breaks_k = classify_jenks(rqr, n_classes=k)
-        gvf = _compute_gvf(rqr, cls_k, k)
-        gvf_scores.append(gvf)
-        results[k] = (cls_k, breaks_k, gvf)
-        print("[Rqr]     k=%d: GVF=%.4f" % (k, gvf))
-
-    if len(gvf_scores) >= 3:
-        second_deriv = []
-        for i in range(1, len(gvf_scores) - 1):
-            d2 = gvf_scores[i - 1] - 2 * gvf_scores[i] + gvf_scores[i + 1]
-            second_deriv.append(abs(d2))
-        elbow_idx = np.argmax(second_deriv) + 1
-        best_k = k_min + elbow_idx
-    else:
-        best_k = k_min
-
-    best_k = max(k_min, min(best_k, k_max))
-    cls_best, breaks_best, gvf_best = results[best_k]
-
-    return best_k, cls_best, breaks_best
-
-
 # -- Main script---------------------------------------------------------------------
 
 def main():
-    print("[Rqr] Iniciando el análisis de la rugosidad residual")
+    print("[Rqr] Iniciando el análisis de la rugosidad residual (v2, Jenks = %s)" % JENKS_METHOD)
 
     mesh = get_mesh()
     cloud = mesh.getAssociatedCloud()
@@ -254,7 +324,7 @@ def main():
     print("[Rqr] Creando mesh adjacency...")
     adj = adjacency_from_mesh(mesh, nv)
 
-    print("[Rqr] Calculándo Rqr (2-ring)...")
+    print("[Rqr] Calculando Rqr (2-ring)...")
     rqr = compute_rqr(residuals, adj)
 
     bad_rqr = ~np.isfinite(rqr)
@@ -262,27 +332,25 @@ def main():
         print("[Rqr] WARNING: %d NaN/Inf Rqr values replaced with 0" % int(bad_rqr.sum()))
         rqr[bad_rqr] = 0.0
 
-    print("[Rqr] Rqr: min=%.6f  max=%.6f  mean=%.6f  std=%.6f"
+    print("[Rqr] Rqr (unidades del modelo): min=%.6g  max=%.6g  mean=%.6g  std=%.6g"
           % (rqr.min(), rqr.max(), rqr.mean(), rqr.std()))
 
-    #   A: Jenks (6 clases)
-    print("[Rqr] Jenks natural breaks (6)...")
-    cls_jenks, thr_jenks = classify_jenks(rqr, n_classes=6)
-    print("[Rqr]   Breaks: %s" % "  ".join("%.6f" % t for t in thr_jenks))
+    #   A: Jenks (6 clases) + auto-k
+    print("[Rqr] Jenks natural breaks (%d) + auto-k..." % JENKS_CLASSES)
+    cls_jenks, thr_jenks, best_k, auto_cls, auto_breaks, gvfs = classify_jenks(rqr)
+    print("[Rqr]   Breaks: %s" % "  ".join("%.6g" % t for t in thr_jenks))
+    for k, g in zip(range(AUTO_K_MIN, AUTO_K_MAX + 1), gvfs):
+        print("[Rqr]     k=%d: GVF=%.4f" % (k, g))
+    print("[Rqr]   Auto-k: %d clases" % best_k)
+    print("[Rqr]   Breaks: %s" % "  ".join("%.6g" % t for t in auto_breaks))
 
     #   B: Desviación estándar (6 clases)
     print("[Rqr] mu +/- sigma...")
     cls_sigma, thr_sigma, mu, sigma = classify_sigma(rqr)
     t1, t2, t3, t4, t5 = thr_sigma
-    print("[Rqr]   mu=%.6f  sigma=%.6f" % (mu, sigma))
-    print("[Rqr]   T1(mu-2s)=%.6f  T2(mu-s)=%.6f  T3(mu-0.5s)=%.6f  T4(mu+0.5s)=%.6f  T5(mu+s)=%.6f"
+    print("[Rqr]   mu=%.6g  sigma=%.6g" % (mu, sigma))
+    print("[Rqr]   T1(mu-2s)=%.6g  T2(mu-s)=%.6g  T3(mu-0.5s)=%.6g  T4(mu+0.5s)=%.6g  T5(mu+s)=%.6g"
           % (t1, t2, t3, t4, t5))
-
-    #   C: Jenks auto-k (Elbow method)
-    print("[Rqr] Jenks auto-k (Elbow method)...")
-    best_k, auto_cls, auto_breaks = classify_jenks_auto(rqr)
-    print("[Rqr]   Auto-k: %d clases" % best_k)
-    print("[Rqr]   Breaks: %s" % "  ".join("%.6f" % t for t in auto_breaks))
 
     class_names = {
         1: "R1 (muy baja)",
@@ -293,17 +361,11 @@ def main():
         6: "R6 (muy alta)"
     }
 
-    print("[Rqr] --- Jenks (6 clases) ---")
-    for c in range(1, 7):
-        n = int((cls_jenks == c).sum())
-        print("[Rqr]   %s: %d verts (%.1f%%)"
-              % (class_names[c], n, n / nv * 100))
-
-    print("[Rqr] --- Sigma ---")
-    for c in range(1, 7):
-        n = int((cls_sigma == c).sum())
-        print("[Rqr]   %s: %d verts (%.1f%%)"
-              % (class_names[c], n, n / nv * 100))
+    for label, cls in (("Jenks (6 clases)", cls_jenks), ("Sigma", cls_sigma)):
+        print("[Rqr] --- %s ---" % label)
+        for c in range(1, 7):
+            n = int((cls == c).sum())
+            print("[Rqr]   %s: %d verts (%.1f%%)" % (class_names[c], n, n / nv * 100))
 
     print("[Rqr] --- Auto-k (%d clases) ---" % best_k)
     for c in range(1, best_k + 1):
@@ -326,7 +388,7 @@ def main():
 
     print("[Rqr] Finalizado. Scalar fields añadidos:")
     print("[Rqr]   - Rqr          (rugosidad residual continua)")
-    print("[Rqr]   - Rqr_Jenks    (R1-R6, Jenks natural breaks)")
+    print("[Rqr]   - Rqr_Jenks    (R1-R6, Jenks natural breaks, %s)" % JENKS_METHOD)
     print("[Rqr]   - Rqr_Sigma    (R1-R6, mu +/- sigma)")
     print("[Rqr]   - Rqr_Auto     (Auto-k, Jenks + Elbow method)")
 
@@ -337,4 +399,3 @@ except Exception as e:
     print("[Rqr] Error: %s" % str(e))
     import traceback
     traceback.print_exc()
-
